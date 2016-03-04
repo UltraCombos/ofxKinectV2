@@ -41,90 +41,93 @@
 
 #include "ofProtonect.h"
 
-ofProtonect::ofProtonect(){
-    bOpened = false;
+ofProtonect::ofProtonect() {
+	bOpened = false;
 
-    if( ofGetLogLevel() == OF_LOG_VERBOSE ){
-        libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Debug));
-    }else{
-        libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Warning));
-    }
+	if (ofGetLogLevel() == OF_LOG_VERBOSE) {
+		libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Debug));
+	}
+	else {
+		libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Warning));
+	}
 }
 
-int ofProtonect::openKinect(string serial){
-          
-//      pipeline = new libfreenect2::CpuPacketPipeline();
-//        pipeline = new libfreenect2::OpenGLPacketPipeline();
-        pipeline = new libfreenect2::OpenCLPacketPipeline();
+int ofProtonect::openKinect(string serial) {
 
-      if(pipeline)
-      {
-        dev = freenect2.openDevice(serial, pipeline);
-      }
+	pipeline = new libfreenect2::CpuPacketPipeline();
+	//pipeline = new libfreenect2::OpenGLPacketPipeline();
+	//pipeline = new libfreenect2::OpenCLPacketPipeline();
 
-      if(dev == 0)
-      {
-        ofLogError("ofProtonect::openKinect")  << "failure opening device with serial " << serial;
-        return -1;
-      }
+	if (pipeline)
+	{
+		dev = freenect2.openDevice(serial, pipeline);
+	}
 
-    
-      listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
-      undistorted = new libfreenect2::Frame(512, 424, 4);
-      registered  = new libfreenect2::Frame(512, 424, 4);
+	if (dev == 0)
+	{
+		ofLogError("ofProtonect::openKinect") << "failure opening device with serial " << serial;
+		return -1;
+	}
 
-      dev->setColorFrameListener(listener);
-      dev->setIrAndDepthFrameListener(listener);
-      dev->start();
 
-      ofLogVerbose("ofProtonect::openKinect") << "device serial: " << dev->getSerialNumber();
-      ofLogVerbose("ofProtonect::openKinect") << "device firmware: " << dev->getFirmwareVersion();
+	listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+	undistorted = new libfreenect2::Frame(512, 424, 4);
+	registered = new libfreenect2::Frame(512, 424, 4);
 
-      registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
+	dev->setColorFrameListener(listener);
+	dev->setIrAndDepthFrameListener(listener);
+	dev->start();
 
-    bOpened = true;
-    
-    return 0;
+	ofLogVerbose("ofProtonect::openKinect") << "device serial: " << dev->getSerialNumber();
+	ofLogVerbose("ofProtonect::openKinect") << "device firmware: " << dev->getFirmwareVersion();
+
+	registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
+	
+
+	bOpened = true;
+
+	return 0;
 }
 
-void ofProtonect::updateKinect(ofPixels & rgbPixels, ofFloatPixels & depthPixels){
-  
-    if(bOpened){
-        listener->waitForNewFrame(frames);
-        libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
-        libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
-        libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
+void ofProtonect::updateKinect(ofPixels & rgbPixels, ofFloatPixels & depthPixels) {
 
-        rgbPixels.setFromPixels(rgb->data, rgb->width, rgb->height, 3);
-        depthPixels.setFromPixels((float *)depth->data, ir->width, ir->height, 1);
+	if (bOpened) {
+		listener->waitForNewFrame(frames);
+		libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
+		libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
+		libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
+		registration->apply(rgb, depth, undistorted, registered);
 
-        listener->release(frames);
-    }
+		rgbPixels.setFromPixels(rgb->data, rgb->width, rgb->height, 4); // should be RGB
+		depthPixels.setFromPixels((float *)depth->data, ir->width, ir->height, 1);
+
+		listener->release(frames);
+	}
 }
 
-int ofProtonect::closeKinect(){
+int ofProtonect::closeKinect() {
 
-  if(bOpened){
-      listener->release(frames);
+	if (bOpened) {
+		listener->release(frames);
 
-      // TODO: restarting ir stream doesn't work!
-      // TODO: bad things will happen, if frame listeners are freed before dev->stop() :(
-      dev->stop();
-      dev->close();
-      
-      delete listener;
-      listener = NULL;
-      
-      delete undistorted;
-      undistorted = NULL;
+		// TODO: restarting ir stream doesn't work!
+		// TODO: bad things will happen, if frame listeners are freed before dev->stop() :(
+		dev->stop();
+		dev->close();
 
-      delete registered;
-      registered = NULL;
-      
-      delete registration;
-      bOpened = false; 
-  }
+		delete listener;
+		listener = NULL;
 
-  return 0;
+		delete undistorted;
+		undistorted = NULL;
+
+		delete registered;
+		registered = NULL;
+
+		delete registration;
+		bOpened = false;
+	}
+
+	return 0;
 }
 
