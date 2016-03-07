@@ -23,7 +23,7 @@ void ofApp::setup() {
 	texColor.resize(kinects.size());
 	texIr.resize(kinects.size());
 	texDepth.resize(kinects.size());
-	
+	texAligned.resize(kinects.size());
 
 	panel.setup("", "settings.xml", 10, 100);
 
@@ -34,6 +34,7 @@ void ofApp::setup() {
 		texColor[d] = shared_ptr<ofTexture>(new ofTexture);
 		texIr[d] = shared_ptr<ofTexture>(new ofTexture);
 		texDepth[d] = shared_ptr<ofTexture>(new ofTexture);
+		texAligned[d] = shared_ptr<ofTexture>(new ofTexture);
 
 		panel.add(kinects[d]->params);
 	}
@@ -55,25 +56,35 @@ void ofApp::update() {
 //	}
 	for (size_t d = 0; d < kinects.size(); d++)
 	{
-		kinects[d]->updateTexture(texColor[d], texIr[d], texDepth[d]);
+		kinects[d]->updateTexture(texColor[d], texIr[d], texDepth[d], texAligned[d]);
 	}
 }
 
 //--------------------------------------------------------------
 void ofApp::draw() {
-	ofDrawBitmapString("ofxKinectV2: Work in progress addon.\nBased on the excellent work by the OpenKinect libfreenect2 team\n\n-Requires USB 3.0 port ( superspeed )\n-Requires patched libusb. If you have the libusb from ofxKinect ( v1 ) linked to your project it will prevent superspeed on Kinect V2", 10, 14);
-
+//	ofDrawBitmapString("ofxKinectV2: Work in progress addon.\nBased on the excellent work by the OpenKinect libfreenect2 team\n\n-Requires USB 3.0 port ( superspeed )\n-Requires patched libusb. If you have the libusb from ofxKinect ( v1 ) linked to your project it will prevent superspeed on Kinect V2", 10, 14);
+	ofPushMatrix();
+	float color_w = 1920.0 * 424 / 1080;
+	auto rect = getCenteredRect(color_w + 512 + 512 + 512, 424 * kinects.size(), ofGetWidth(), ofGetHeight(), false);
+	float h = rect.height / kinects.size();
+	float sc = h / 424.0f;
+	ofTranslate(rect.position);
 	for (size_t d = 0; d < kinects.size(); d++) {
-		float dwHD = 1920 / 4;
-		float dhHD = 1080 / 4;
-
-		if (!texDepth[d]->isAllocated() || !texColor[d]->isAllocated())
+		if (!texDepth[d]->isAllocated() || !texColor[d]->isAllocated() || !texIr[d]->isAllocated() || !texAligned[d]->isAllocated())
 			continue;
-		float shiftY = 100 + ((10 + texDepth[d]->getHeight()) * d);
-		texDepth[d]->draw(200, shiftY);
-		texColor[d]->draw(210 + texDepth[d]->getWidth(), shiftY, dwHD, dhHD);
+		ofPushMatrix();
+		ofScale(sc, sc);
+		texColor[d]->draw(0, 0, color_w, 424);
+		ofTranslate(color_w, 0);
+		texIr[d]->draw(0, 0);
+		ofTranslate(texIr[d]->getWidth(), 0);
+		texDepth[d]->draw(0, 0);
+		ofTranslate(texDepth[d]->getWidth(), 0);
+		texAligned[d]->draw(0, 0);
+		ofPopMatrix();
+		ofTranslate(0, h);
 	}
-
+	ofPopMatrix();
 	panel.draw();
 }
 

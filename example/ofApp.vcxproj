@@ -183,7 +183,6 @@
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxSlider.cpp" />
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxSliderGroup.cpp" />
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxToggle.cpp" />
-    <ClCompile Include="..\libs\protonect\ofProtonect.cpp" />
     <ClCompile Include="..\src\ofxKinectV2.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ofApp.cpp" />
@@ -223,8 +222,6 @@
     <ClInclude Include="..\libs\libfreenect2\include\libfreenect2\logger.h" />
     <ClInclude Include="..\libs\libfreenect2\include\libfreenect2\packet_pipeline.h" />
     <ClInclude Include="..\libs\libfreenect2\include\libfreenect2\registration.h" />
-    <ClInclude Include="..\libs\libfreenect2\src\tinythread\tinythread.h" />
-    <ClInclude Include="..\libs\protonect\ofProtonect.h" />
     <ClInclude Include="..\src\ofxKinectV2.h" />
     <ClInclude Include="src\ofApp.h" />
   </ItemGroup>

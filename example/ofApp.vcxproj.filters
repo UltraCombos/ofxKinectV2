@@ -34,9 +34,6 @@
     <ClCompile Include="..\src\ofxKinectV2.cpp">
       <Filter>addons\ofxKinectV2\src</Filter>
     </ClCompile>
-    <ClCompile Include="..\libs\protonect\ofProtonect.cpp">
-      <Filter>addons\ofxKinectV2\libs\protonect</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="src">
@@ -60,9 +57,6 @@
     <Filter Include="addons\ofxKinectV2\libs">
       <UniqueIdentifier>{feb63825-b125-4ad0-b1c7-28a136d8d84b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="addons\ofxKinectV2\libs\protonect">
-      <UniqueIdentifier>{b6ffda14-b4c0-40bf-b577-5a62e36d1baa}</UniqueIdentifier>
-    </Filter>
     <Filter Include="addons\ofxKinectV2\libs\libfreenect2">
       <UniqueIdentifier>{95f0e022-be7a-4c9b-9737-8fbb8586c7b9}</UniqueIdentifier>
     </Filter>
@@ -83,12 +77,6 @@
     </Filter>
     <Filter Include="addons\ofxKinectV2\libs\libfreenect2\include\internal\libfreenect2\protocol">
       <UniqueIdentifier>{a49709a6-6d62-4e8d-afd3-b0b07acfd1ae}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="addons\ofxKinectV2\libs\libfreenect2\src">
-      <UniqueIdentifier>{f82cd0d1-1885-415d-b6b9-67bdf2bda2ea}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="addons\ofxKinectV2\libs\libfreenect2\src\tinythread">
-      <UniqueIdentifier>{252128df-d9f5-4656-9601-50e3be699f94}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -124,9 +112,6 @@
     </ClInclude>
     <ClInclude Include="..\src\ofxKinectV2.h">
       <Filter>addons\ofxKinectV2\src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\libs\protonect\ofProtonect.h">
-      <Filter>addons\ofxKinectV2\libs\protonect</Filter>
     </ClInclude>
     <ClInclude Include="..\libs\libfreenect2\include\libfreenect2\frame_listener.hpp">
       <Filter>addons\ofxKinectV2\libs\libfreenect2\include\libfreenect2</Filter>
@@ -202,9 +187,6 @@
     </ClInclude>
     <ClInclude Include="..\libs\libfreenect2\include\libfreenect2\export.h">
       <Filter>addons\ofxKinectV2\libs\libfreenect2\include\libfreenect2</Filter>
-    </ClInclude>
-    <ClInclude Include="..\libs\libfreenect2\src\tinythread\tinythread.h">
-      <Filter>addons\ofxKinectV2\libs\libfreenect2\src\tinythread</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

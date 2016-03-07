@@ -25,6 +25,7 @@ ofxKinectV2::ofxKinectV2() {
 	frameColor.resize(2);
 	frameIr.resize(2);
 	frameDepth.resize(2);
+	frameAligned.resize(2);
 
 	//set default distance range to 50cm - 600cm
 
@@ -107,19 +108,28 @@ bool ofxKinectV2::open(string serial) {
 }
 
 //--------------------------------------------------------------------------------
-void ofxKinectV2::threadedFunction() {
+void ofxKinectV2::threadedFunction() 
+{
+	libfreenect2::Frame undistorted(512, 424, 4), registered(512, 424, 4);
 
-	while (isThreadRunning()) {
+	while (isThreadRunning()) 
+	{
 		if (!bOpened)
 			continue;
 		listener->waitForNewFrame(frames);
 		libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
 		libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
 		libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
-		//registration->apply(rgb, depth, undistorted, registered);
+		registration->apply(rgb, depth, &undistorted, &registered);
 
 		frameColor[indexBack].setFromPixels(rgb->data, rgb->width, rgb->height, 4);
+		for (auto pixel : frameColor[indexBack].getPixelsIter())
+			std::swap(pixel[0], pixel[2]);
+		frameIr[indexBack].setFromPixels((float *)ir->data, ir->width, ir->height, 1);
 		frameDepth[indexBack].setFromPixels((float *)depth->data, depth->width, depth->height, 1);
+		frameAligned[indexBack].setFromPixels(registered.data, registered.width, registered.height, 4);
+		for (auto pixel : frameAligned[indexBack].getPixelsIter())
+			std::swap(pixel[0], pixel[2]);
 
 		listener->release(frames);
 
@@ -127,7 +137,9 @@ void ofxKinectV2::threadedFunction() {
 		std::lock_guard<std::mutex> guard(mutex);
 		std::swap(indexFront, indexBack);
 		bNewFrame = true;
-		printf("new frame\n");
+		float delta_time = ofGetElapsedTimef() - timestamp;
+		timestamp = ofGetElapsedTimef();
+		printf("new frame cost %f seconds\n", delta_time);
 	}
 }
 
@@ -170,24 +182,32 @@ void ofxKinectV2::update(bool convertDepthPix) {
 	}
 }
 
-void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth)
+void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned)
 {
 	std::lock_guard<std::mutex> guard(mutex);
-	if (!bNewFrame || !color || !ir || !depth)
+	if (!bNewFrame || !color || !ir || !depth || !aligned)
 		return;
 	if (frameColor[indexFront].isAllocated())
 	{
-		frameColor[indexFront].swapRgb();
-		if (!color->isAllocated())
-			color->allocate(1920, 1080, GL_RGBA);
+//		if (!color->isAllocated())
+//			color->allocate(1920, 1080, GL_RGBA);
 		color->loadData(frameColor[indexFront]);
 	}
-
+	if (frameIr[indexFront].isAllocated())
+	{
+//		if (!ir->isAllocated())
+//			ir->allocate(512, 424, GL_R32F);
+		ir->loadData(frameIr[indexFront]);
+	}
 	if (frameDepth[indexFront].isAllocated())
 	{
-		if (!depth->isAllocated())
-			depth->allocate(512, 424, GL_R32F);
+//		if (!depth->isAllocated())
+//			depth->allocate(512, 424, GL_R32F);
 		depth->loadData(frameDepth[indexFront]);
+	}
+	if (frameDepth[indexFront].isAllocated())
+	{
+		aligned->loadData(frameAligned[indexFront]);
 	}
 
 	bNewFrame = false;
@@ -241,10 +261,7 @@ int ofxKinectV2::openKinect(std::string serial)
 		return -1;
 	}
 
-
 	listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
-	undistorted = new libfreenect2::Frame(512, 424, 4);
-	registered = new libfreenect2::Frame(512, 424, 4);
 
 	dev->setColorFrameListener(listener);
 	dev->setIrAndDepthFrameListener(listener);
@@ -254,7 +271,6 @@ int ofxKinectV2::openKinect(std::string serial)
 	ofLogVerbose("ofxKinectV2::openKinect") << "device firmware: " << dev->getFirmwareVersion();
 
 	registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
-
 
 	bOpened = true;
 
@@ -272,13 +288,9 @@ void ofxKinectV2::closeKinect()
 
 	delete listener;
 	listener = NULL;
-
-	delete undistorted;
-	undistorted = NULL;
-
-	delete registered;
-	registered = NULL;
-
+	
 	delete registration;
+	registration = NULL;
+
 	bOpened = false;
 }

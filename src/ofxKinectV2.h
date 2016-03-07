@@ -36,7 +36,7 @@ public:
 	bool open(string serial);
 	bool open(unsigned int deviceId = 0);
 	void update(bool convertDepthPix = true);
-	void updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth);
+	void updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned);
 	void close();
 
 	bool isFrameNew();
@@ -69,9 +69,11 @@ protected:
 	int indexFront = 0;
 	int indexBack = 1;
 	bool bNewFrame = false;
+	float timestamp = 0.0f;
 	std::vector<ofPixels> frameColor;
-	std::vector<ofPixels> frameIr;
+	std::vector<ofFloatPixels> frameIr;
 	std::vector<ofFloatPixels> frameDepth;
+	std::vector<ofPixels> frameAligned;
 
 	int lastFrameNo;
 
@@ -85,6 +87,4 @@ private:
 
 	libfreenect2::Registration* registration;
 	libfreenect2::SyncMultiFrameListener* listener;
-	libfreenect2::Frame* undistorted = NULL;
-	libfreenect2::Frame* registered = NULL;
 };
