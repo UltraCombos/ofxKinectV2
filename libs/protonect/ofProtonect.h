@@ -48,6 +48,5 @@ protected:
 	libfreenect2::SyncMultiFrameListener * listener;
 	libfreenect2::Frame  * undistorted = NULL;
 	libfreenect2::Frame  * registered = NULL;
-	libfreenect2::Frame  * bigFrame = NULL;
 
 };

@@ -25,8 +25,12 @@ public:
 
 	ofxPanel panel;
 
-	vector < shared_ptr<ofxKinectV2> > kinects;
+	std::vector<std::shared_ptr<ofxKinectV2>> kinects;
 
-	vector <ofTexture> texDepth;
-	vector <ofTexture> texRGB;
+	std::vector<std::shared_ptr<ofTexture>> texColor;
+	std::vector<std::shared_ptr<ofTexture>> texIr;
+	std::vector<std::shared_ptr<ofTexture>> texDepth;
+	
+
+
 };

@@ -8,7 +8,12 @@
 
 #pragma once
 
-#include "ofProtonect.h"
+#include <libfreenect2/libfreenect2.hpp>
+#include <libfreenect2/frame_listener_impl.h>
+#include <libfreenect2/registration.h>
+#include <libfreenect2/packet_pipeline.h>
+#include <libfreenect2/logger.h>
+
 #include "ofMain.h"
 
 class ofxKinectV2 : public ofThread {
@@ -25,12 +30,13 @@ public:
 	~ofxKinectV2();
 
 	//for some reason these can't be static - so you need to make a tmp object to query them
-	vector <KinectDeviceInfo> getDeviceList();
+	vector<KinectDeviceInfo> getDeviceList();
 	unsigned int getNumDevices();
 
 	bool open(string serial);
 	bool open(unsigned int deviceId = 0);
 	void update(bool convertDepthPix = true);
+	void updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth);
 	void close();
 
 	bool isFrameNew();
@@ -40,25 +46,45 @@ public:
 	ofFloatPixels& getRawDepthPixels();
 
 	ofParameterGroup params;
-	ofParameter <float> minDistance;
-	ofParameter <float> maxDistance;
+	ofParameter<float> minDistance;
+	ofParameter<float> maxDistance;
 
 protected:
 	void threadedFunction();
+	int openKinect(std::string serial);
+	void closeKinect();
 
 	ofPixels rgbPix;
 	ofPixels depthPix;
 	ofFloatPixels rawDepthPixels;
-
-	bool bNewBuffer;
-	bool bNewFrame;
-	bool bOpened;
-
-	ofProtonect protonect;
-
 	ofPixels rgbPixelsBack;
 	ofPixels rgbPixelsFront;
 	ofFloatPixels depthPixelsBack;
 	ofFloatPixels depthPixelsFront;
+
+	bool bNewBuffer = false;
+	
+	bool bOpened = false;
+
+	int indexFront = 0;
+	int indexBack = 1;
+	bool bNewFrame = false;
+	std::vector<ofPixels> frameColor;
+	std::vector<ofPixels> frameIr;
+	std::vector<ofFloatPixels> frameDepth;
+
 	int lastFrameNo;
+
+private:
+	libfreenect2::Freenect2 freenect2;
+
+	libfreenect2::Freenect2Device *dev = 0;
+	libfreenect2::PacketPipeline *pipeline = 0;
+
+	libfreenect2::FrameMap frames;
+
+	libfreenect2::Registration* registration;
+	libfreenect2::SyncMultiFrameListener* listener;
+	libfreenect2::Frame* undistorted = NULL;
+	libfreenect2::Frame* registered = NULL;
 };

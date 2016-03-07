@@ -15,6 +15,17 @@ ofxKinectV2::ofxKinectV2() {
 	bOpened = false;
 	lastFrameNo = -1;
 
+	if (ofGetLogLevel() == OF_LOG_VERBOSE) {
+		libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Debug));
+	}
+	else {
+		libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Warning));
+	}
+
+	frameColor.resize(2);
+	frameIr.resize(2);
+	frameDepth.resize(2);
+
 	//set default distance range to 50cm - 600cm
 
 	params.add(minDistance.set("minDistance", 500, 0, 12000));
@@ -32,13 +43,13 @@ static bool sortBySerialName(const ofxKinectV2::KinectDeviceInfo & A, const ofxK
 }
 
 //--------------------------------------------------------------------------------
-vector <ofxKinectV2::KinectDeviceInfo> ofxKinectV2::getDeviceList() {
-	vector <KinectDeviceInfo> devices;
+vector<ofxKinectV2::KinectDeviceInfo> ofxKinectV2::getDeviceList() {
+	vector<KinectDeviceInfo> devices;
 
-	int num = protonect.getFreenect2Instance().enumerateDevices();
+	int num = freenect2.enumerateDevices();
 	for (int i = 0; i < num; i++) {
 		KinectDeviceInfo kdi;
-		kdi.serial = protonect.getFreenect2Instance().getDeviceSerialNumber(i);
+		kdi.serial = freenect2.getDeviceSerialNumber(i);
 		kdi.freenectId = i;
 		devices.push_back(kdi);
 	}
@@ -81,11 +92,7 @@ bool ofxKinectV2::open(string serial) {
 
 	params.setName("kinectV2 " + serial);
 
-	bNewFrame = false;
-	bNewBuffer = false;
-	bOpened = false;
-
-	int retVal = protonect.openKinect(serial);
+	int retVal = openKinect(serial);
 
 	if (retVal == 0) {
 		lastFrameNo = -1;
@@ -103,13 +110,24 @@ bool ofxKinectV2::open(string serial) {
 void ofxKinectV2::threadedFunction() {
 
 	while (isThreadRunning()) {
-		protonect.updateKinect(rgbPixelsBack, depthPixelsBack);
-		rgbPixelsFront.swap(rgbPixelsBack);
-		depthPixelsFront.swap(depthPixelsBack);
+		if (!bOpened)
+			continue;
+		listener->waitForNewFrame(frames);
+		libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
+		libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
+		libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
+		//registration->apply(rgb, depth, undistorted, registered);
 
-		lock();
-		bNewBuffer = true;
-		unlock();
+		frameColor[indexBack].setFromPixels(rgb->data, rgb->width, rgb->height, 4);
+		frameDepth[indexBack].setFromPixels((float *)depth->data, depth->width, depth->height, 1);
+
+		listener->release(frames);
+
+
+		std::lock_guard<std::mutex> guard(mutex);
+		std::swap(indexFront, indexBack);
+		bNewFrame = true;
+		printf("new frame\n");
 	}
 }
 
@@ -121,11 +139,14 @@ void ofxKinectV2::update(bool convertDepthPix) {
 	}
 	if (bNewBuffer) {
 
-		lock();
+		std::lock_guard<std::mutex> guard(mutex);
 		rgbPix = rgbPixelsFront;
+#if 1
+		depthPix = depthPixelsFront;
+		bNewBuffer = false;
+#else
 		rawDepthPixels = depthPixelsFront;
 		bNewBuffer = false;
-		unlock();
 
 		if (rawDepthPixels.size() > 0 && convertDepthPix) {
 			if (depthPix.getWidth() != rawDepthPixels.getWidth()) {
@@ -143,10 +164,34 @@ void ofxKinectV2::update(bool convertDepthPix) {
 			}
 
 		}
-
+#endif
 
 		bNewFrame = true;
 	}
+}
+
+void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth)
+{
+	std::lock_guard<std::mutex> guard(mutex);
+	if (!bNewFrame || !color || !ir || !depth)
+		return;
+	if (frameColor[indexFront].isAllocated())
+	{
+		frameColor[indexFront].swapRgb();
+		if (!color->isAllocated())
+			color->allocate(1920, 1080, GL_RGBA);
+		color->loadData(frameColor[indexFront]);
+	}
+
+	if (frameDepth[indexFront].isAllocated())
+	{
+		if (!depth->isAllocated())
+			depth->allocate(512, 424, GL_R32F);
+		depth->loadData(frameDepth[indexFront]);
+	}
+
+	bNewFrame = false;
+	printf("new texture\n");
 }
 
 //--------------------------------------------------------------------------------
@@ -171,11 +216,69 @@ ofPixels& ofxKinectV2::getRgbPixels() {
 
 //--------------------------------------------------------------------------------
 void ofxKinectV2::close() {
-	if (bOpened) {
-		waitForThread(true);
-		protonect.closeKinect();
-		bOpened = false;
-	}
+	if (!bOpened)
+		return;
+
+	waitForThread(true);
+	closeKinect();
+	bOpened = false;
 }
 
+int ofxKinectV2::openKinect(std::string serial)
+{
+	pipeline = new libfreenect2::CpuPacketPipeline();
+	//pipeline = new libfreenect2::OpenGLPacketPipeline();
+	//pipeline = new libfreenect2::OpenCLPacketPipeline();
 
+	if (pipeline)
+	{
+		dev = freenect2.openDevice(serial, pipeline);
+	}
+
+	if (dev == 0)
+	{
+		ofLogError("ofxKinectV2::openKinect") << "failure opening device with serial " << serial;
+		return -1;
+	}
+
+
+	listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+	undistorted = new libfreenect2::Frame(512, 424, 4);
+	registered = new libfreenect2::Frame(512, 424, 4);
+
+	dev->setColorFrameListener(listener);
+	dev->setIrAndDepthFrameListener(listener);
+	dev->start();
+
+	ofLogVerbose("ofxKinectV2::openKinect") << "device serial: " << dev->getSerialNumber();
+	ofLogVerbose("ofxKinectV2::openKinect") << "device firmware: " << dev->getFirmwareVersion();
+
+	registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
+
+
+	bOpened = true;
+
+	return 0;
+}
+
+void ofxKinectV2::closeKinect()
+{
+	listener->release(frames);
+
+	// TODO: restarting ir stream doesn't work!
+	// TODO: bad things will happen, if frame listeners are freed before dev->stop() :(
+	dev->stop();
+	dev->close();
+
+	delete listener;
+	listener = NULL;
+
+	delete undistorted;
+	undistorted = NULL;
+
+	delete registered;
+	registered = NULL;
+
+	delete registration;
+	bOpened = false;
+}

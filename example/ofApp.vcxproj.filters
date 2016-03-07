@@ -37,9 +37,6 @@
     <ClCompile Include="..\libs\protonect\ofProtonect.cpp">
       <Filter>addons\ofxKinectV2\libs\protonect</Filter>
     </ClCompile>
-    <ClCompile Include="..\libs\libfreenect2\src\tinythread\tinythread.cpp">
-      <Filter>addons\ofxKinectV2\libs\libfreenect2\src\tinythread</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="src">

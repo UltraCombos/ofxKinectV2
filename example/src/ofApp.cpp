@@ -20,8 +20,10 @@ void ofApp::setup() {
 
 	//allocate for this many devices
 	kinects.resize(deviceList.size());
+	texColor.resize(kinects.size());
+	texIr.resize(kinects.size());
 	texDepth.resize(kinects.size());
-	texRGB.resize(kinects.size());
+	
 
 	panel.setup("", "settings.xml", 10, 100);
 
@@ -29,6 +31,10 @@ void ofApp::setup() {
 	for (size_t d = 0; d < kinects.size(); d++) {
 		kinects[d] = shared_ptr<ofxKinectV2>(new ofxKinectV2);
 		kinects[d]->open(deviceList[d].serial);
+		texColor[d] = shared_ptr<ofTexture>(new ofTexture);
+		texIr[d] = shared_ptr<ofTexture>(new ofTexture);
+		texDepth[d] = shared_ptr<ofTexture>(new ofTexture);
+
 		panel.add(kinects[d]->params);
 	}
 
@@ -38,13 +44,18 @@ void ofApp::setup() {
 
 //--------------------------------------------------------------
 void ofApp::update() {
+	ofSetWindowTitle(ofVAArgsToString("ofxKinectV2: %3.2f", ofGetFrameRate()));
 
-	for (size_t d = 0; d < kinects.size(); d++) {
-		kinects[d]->update();
-		if (kinects[d]->isFrameNew()) {
-			texDepth[d].loadData(kinects[d]->getDepthPixels());
-			texRGB[d].loadData(kinects[d]->getRgbPixels());
-		}
+//	for (size_t d = 0; d < kinects.size(); d++) {
+//		kinects[d]->update();
+//		if (kinects[d]->isFrameNew()) {
+//			texDepth[d].loadData(kinects[d]->getDepthPixels());
+//			texRGB[d].loadData(kinects[d]->getRgbPixels());
+//		}
+//	}
+	for (size_t d = 0; d < kinects.size(); d++)
+	{
+		kinects[d]->updateTexture(texColor[d], texIr[d], texDepth[d]);
 	}
 }
 
@@ -56,11 +67,11 @@ void ofApp::draw() {
 		float dwHD = 1920 / 4;
 		float dhHD = 1080 / 4;
 
-		if (!texDepth[d].isAllocated() || !texRGB[d].isAllocated())
+		if (!texDepth[d]->isAllocated() || !texColor[d]->isAllocated())
 			continue;
-		float shiftY = 100 + ((10 + texDepth[d].getHeight()) * d);
-		texDepth[d].draw(200, shiftY);
-		texRGB[d].draw(210 + texDepth[d].getWidth(), shiftY, dwHD, dhHD);
+		float shiftY = 100 + ((10 + texDepth[d]->getHeight()) * d);
+		texDepth[d]->draw(200, shiftY);
+		texColor[d]->draw(210 + texDepth[d]->getWidth(), shiftY, dwHD, dhHD);
 	}
 
 	panel.draw();

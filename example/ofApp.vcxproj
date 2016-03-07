@@ -183,7 +183,6 @@
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxSlider.cpp" />
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxSliderGroup.cpp" />
     <ClCompile Include="..\..\..\addons\ofxGui\src\ofxToggle.cpp" />
-    <ClCompile Include="..\libs\libfreenect2\src\tinythread\tinythread.cpp" />
     <ClCompile Include="..\libs\protonect\ofProtonect.cpp" />
     <ClCompile Include="..\src\ofxKinectV2.cpp" />
     <ClCompile Include="src\main.cpp" />

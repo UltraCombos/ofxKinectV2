@@ -97,8 +97,9 @@ void ofProtonect::updateKinect(ofPixels & rgbPixels, ofFloatPixels & depthPixels
 		libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
 		libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
 		registration->apply(rgb, depth, undistorted, registered);
-
+		
 		rgbPixels.setFromPixels(rgb->data, rgb->width, rgb->height, 4); // should be RGB
+		//rgbPixels.swapRgb();
 		depthPixels.setFromPixels((float *)depth->data, ir->width, ir->height, 1);
 
 		listener->release(frames);
