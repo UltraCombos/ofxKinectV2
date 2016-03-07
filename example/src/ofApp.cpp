@@ -10,10 +10,10 @@
 void ofApp::setup() {
 
 	//Uncomment for verbose info from libfreenect2
-	//ofSetLogLevel(OF_LOG_VERBOSE);
+	ofSetLogLevel(OF_LOG_VERBOSE);
 
 	ofBackground(30, 30, 30);
-
+#if 1
 	//see how many devices we have.
 	ofxKinectV2 tmp;
 	vector<ofxKinectV2::KinectDeviceInfo> deviceList = tmp.getDeviceList();
@@ -40,29 +40,40 @@ void ofApp::setup() {
 	}
 
 	panel.loadFromFile("settings.xml");
-
+#else
+	pipeline = new libfreenect2::CpuPacketPipeline();
+	string serial = freenect2.getDefaultDeviceSerialNumber();
+	dev = freenect2.openDevice(serial, pipeline);
+	listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+	dev->setColorFrameListener(listener);
+	dev->setIrAndDepthFrameListener(listener);
+	dev->start();
+	ofLogVerbose("ofxKinectV2::openKinect") << "device serial: " << dev->getSerialNumber();
+	ofLogVerbose("ofxKinectV2::openKinect") << "device firmware: " << dev->getFirmwareVersion();
+	registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
+#endif
 }
 
 //--------------------------------------------------------------
 void ofApp::update() {
 	ofSetWindowTitle(ofVAArgsToString("ofxKinectV2: %3.2f", ofGetFrameRate()));
 
-//	for (size_t d = 0; d < kinects.size(); d++) {
-//		kinects[d]->update();
-//		if (kinects[d]->isFrameNew()) {
-//			texDepth[d].loadData(kinects[d]->getDepthPixels());
-//			texRGB[d].loadData(kinects[d]->getRgbPixels());
-//		}
-//	}
+
+#if 1
 	for (size_t d = 0; d < kinects.size(); d++)
 	{
 		kinects[d]->updateTexture(texColor[d], texIr[d], texDepth[d], texAligned[d]);
 	}
+#else
+	listener->waitForNewFrame(frames);
+	listener->release(frames);
+#endif
 }
 
 //--------------------------------------------------------------
 void ofApp::draw() {
 //	ofDrawBitmapString("ofxKinectV2: Work in progress addon.\nBased on the excellent work by the OpenKinect libfreenect2 team\n\n-Requires USB 3.0 port ( superspeed )\n-Requires patched libusb. If you have the libusb from ofxKinect ( v1 ) linked to your project it will prevent superspeed on Kinect V2", 10, 14);
+#if 1
 	ofPushMatrix();
 	float color_w = 1920.0 * 424 / 1080;
 	auto rect = getCenteredRect(color_w + 512 + 512 + 512, 424 * kinects.size(), ofGetWidth(), ofGetHeight(), false);
@@ -86,6 +97,25 @@ void ofApp::draw() {
 	}
 	ofPopMatrix();
 	panel.draw();
+#endif
+}
+
+//--------------------------------------------------------------
+void ofApp::exit() {
+#if 0
+	listener->release(frames);
+
+	// TODO: restarting ir stream doesn't work!
+	// TODO: bad things will happen, if frame listeners are freed before dev->stop() :(
+	dev->stop();
+	dev->close();
+
+	delete listener;
+	listener = NULL;
+
+	delete registration;
+	registration = NULL;
+#endif
 }
 
 //--------------------------------------------------------------

@@ -1,7 +1,5 @@
 #pragma once
 
-#define LIBUSB_DEBUG 4
-
 #include "ofMain.h"
 #include "ofxKinectV2.h"
 #include "ofxGui.h"
@@ -12,6 +10,7 @@ public:
 	void setup();
 	void update();
 	void draw();
+	void exit();
 
 	void keyPressed(int key);
 	void keyReleased(int key);
@@ -23,6 +22,7 @@ public:
 	void dragEvent(ofDragInfo dragInfo);
 	void gotMessage(ofMessage msg);
 
+#if 1
 	ofxPanel panel;
 
 	std::vector<std::shared_ptr<ofxKinectV2>> kinects;
@@ -31,6 +31,17 @@ public:
 	std::vector<std::shared_ptr<ofTexture>> texIr;
 	std::vector<std::shared_ptr<ofTexture>> texDepth;
 	std::vector<std::shared_ptr<ofTexture>> texAligned;
+#else
+	libfreenect2::Freenect2 freenect2;
+
+	libfreenect2::Freenect2Device *dev = 0;
+	libfreenect2::PacketPipeline *pipeline = 0;
+
+	libfreenect2::FrameMap frames;
+
+	libfreenect2::Registration* registration;
+	libfreenect2::SyncMultiFrameListener* listener;
+#endif
 
 	ofRectangle getCenteredRect(int srcWidth, int srcHeight, int otherWidth = ofGetWidth(), int otherHeight = ofGetHeight(), bool isFill = true)
 	{
@@ -49,4 +60,6 @@ public:
 		return result;
 	}
 
+
+	
 };

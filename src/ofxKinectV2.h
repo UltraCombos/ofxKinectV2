@@ -9,10 +9,8 @@
 #pragma once
 
 #include <libfreenect2/libfreenect2.hpp>
-#include <libfreenect2/frame_listener_impl.h>
 #include <libfreenect2/registration.h>
-#include <libfreenect2/packet_pipeline.h>
-#include <libfreenect2/logger.h>
+#include <libfreenect2/frame_listener_impl.h>
 
 #include "ofMain.h"
 
@@ -35,47 +33,31 @@ public:
 
 	bool open(string serial);
 	bool open(unsigned int deviceId = 0);
-	void update(bool convertDepthPix = true);
 	void updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned);
 	void close();
-
-	bool isFrameNew();
-
-	ofPixels& getDepthPixels();
-	ofPixels& getRgbPixels();
-	ofFloatPixels& getRawDepthPixels();
 
 	ofParameterGroup params;
 	ofParameter<float> minDistance;
 	ofParameter<float> maxDistance;
+	ofParameter<bool> bUseRawDepth;
 
 protected:
 	void threadedFunction();
 	int openKinect(std::string serial);
 	void closeKinect();
-
-	ofPixels rgbPix;
-	ofPixels depthPix;
-	ofFloatPixels rawDepthPixels;
-	ofPixels rgbPixelsBack;
-	ofPixels rgbPixelsFront;
-	ofFloatPixels depthPixelsBack;
-	ofFloatPixels depthPixelsFront;
-
-	bool bNewBuffer = false;
 	
 	bool bOpened = false;
 
 	int indexFront = 0;
 	int indexBack = 1;
 	bool bNewFrame = false;
-	float timestamp = 0.0f;
+	
 	std::vector<ofPixels> frameColor;
+	std::vector<ofPixels> frameDepth;
 	std::vector<ofFloatPixels> frameIr;
-	std::vector<ofFloatPixels> frameDepth;
+	std::vector<ofFloatPixels> frameRawDepth;
 	std::vector<ofPixels> frameAligned;
 
-	int lastFrameNo;
 
 private:
 	libfreenect2::Freenect2 freenect2;

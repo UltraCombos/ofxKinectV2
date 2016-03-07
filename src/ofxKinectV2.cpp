@@ -7,13 +7,13 @@
 //
 
 #include "ofxKinectV2.h"
+#include <GLFW/glfw3.h>
+#include <libfreenect2/logger.h>
 
 //--------------------------------------------------------------------------------
 ofxKinectV2::ofxKinectV2() {
 	bNewFrame = false;
-	bNewBuffer = false;
 	bOpened = false;
-	lastFrameNo = -1;
 
 	if (ofGetLogLevel() == OF_LOG_VERBOSE) {
 		libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Debug));
@@ -23,14 +23,16 @@ ofxKinectV2::ofxKinectV2() {
 	}
 
 	frameColor.resize(2);
-	frameIr.resize(2);
 	frameDepth.resize(2);
+	frameIr.resize(2);
+	frameRawDepth.resize(2);
 	frameAligned.resize(2);
 
 	//set default distance range to 50cm - 600cm
 
 	params.add(minDistance.set("minDistance", 500, 0, 12000));
 	params.add(maxDistance.set("maxDistance", 6000, 0, 12000));
+	params.add(bUseRawDepth.set("rawDepth", false));
 }
 
 //--------------------------------------------------------------------------------
@@ -95,13 +97,8 @@ bool ofxKinectV2::open(string serial) {
 
 	int retVal = openKinect(serial);
 
-	if (retVal == 0) {
-		lastFrameNo = -1;
-		startThread(true);
-	}
-	else {
-		return false;
-	}
+	if (retVal == 0) startThread(true);
+	else return false;
 
 	bOpened = true;
 	return true;
@@ -116,71 +113,58 @@ void ofxKinectV2::threadedFunction()
 	{
 		if (!bOpened)
 			continue;
+		//float timestamp = ofGetElapsedTimef();
 		listener->waitForNewFrame(frames);
+		//std::printf("new frame cost %f seconds\n", ofGetElapsedTimef() - timestamp);
 		libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
 		libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
 		libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
 		registration->apply(rgb, depth, &undistorted, &registered);
 
 		frameColor[indexBack].setFromPixels(rgb->data, rgb->width, rgb->height, 4);
-		for (auto pixel : frameColor[indexBack].getPixelsIter())
-			std::swap(pixel[0], pixel[2]);
 		frameIr[indexBack].setFromPixels((float *)ir->data, ir->width, ir->height, 1);
-		frameDepth[indexBack].setFromPixels((float *)depth->data, depth->width, depth->height, 1);
+		frameRawDepth[indexBack].setFromPixels((float *)depth->data, depth->width, depth->height, 1);
 		frameAligned[indexBack].setFromPixels(registered.data, registered.width, registered.height, 4);
-		for (auto pixel : frameAligned[indexBack].getPixelsIter())
+		
+		listener->release(frames);
+		for (auto pixel : frameColor[indexBack].getPixelsIter()) // swap rgb
+			std::swap(pixel[0], pixel[2]);
+		for (auto pixel : frameIr[indexBack].getPixelsIter()) // downscale to 0-1
+			pixel[0] /= 65535.0f;
+		for (auto pixel : frameAligned[indexBack].getPixelsIter()) // swap rgb
 			std::swap(pixel[0], pixel[2]);
 
-		listener->release(frames);
+		if(!bUseRawDepth) {
+#if 1
+			auto& depth = frameDepth[indexBack];
+			if ((depth.getWidth() != frameRawDepth[indexBack].getWidth()) || (depth.getHeight() != frameRawDepth[indexBack].getHeight()))
+			{
+				depth.allocate(frameRawDepth[indexBack].getWidth(), frameRawDepth[indexBack].getHeight(), 3);
+			}
+			for (int i = 0; i < frameRawDepth[indexBack].size(); i++) {
+				float hue = ofMap(frameRawDepth[indexBack][i], minDistance, maxDistance, 0.0, 0.8, true);
+				if (hue == 0.8f) depth.setColor(i * 3, ofColor(0));
+				else if (hue == 0.0f) depth.setColor(i * 3, ofColor(0));
+				else depth.setColor(i * 3, ofFloatColor::fromHsb(hue, 0.9, 0.9));
+			}
+#else
+			for (auto pixel : frameRawDepth[indexBack].getPixelsIter())
+			{
+				pixel[0] = ofMap(pixel[0], minDistance, maxDistance, 1, 0, true);
+				if (pixel[0] == 1) {
+					pixel[0] = 0;
+				}
+			}
+#endif
+		}
 
 
 		std::lock_guard<std::mutex> guard(mutex);
 		std::swap(indexFront, indexBack);
 		bNewFrame = true;
-		float delta_time = ofGetElapsedTimef() - timestamp;
-		timestamp = ofGetElapsedTimef();
-		printf("new frame cost %f seconds\n", delta_time);
 	}
 }
 
-//--------------------------------------------------------------------------------
-void ofxKinectV2::update(bool convertDepthPix) {
-	if (ofGetFrameNum() != lastFrameNo) {
-		bNewFrame = false;
-		lastFrameNo = ofGetFrameNum();
-	}
-	if (bNewBuffer) {
-
-		std::lock_guard<std::mutex> guard(mutex);
-		rgbPix = rgbPixelsFront;
-#if 1
-		depthPix = depthPixelsFront;
-		bNewBuffer = false;
-#else
-		rawDepthPixels = depthPixelsFront;
-		bNewBuffer = false;
-
-		if (rawDepthPixels.size() > 0 && convertDepthPix) {
-			if (depthPix.getWidth() != rawDepthPixels.getWidth()) {
-				depthPix.allocate(rawDepthPixels.getWidth(), rawDepthPixels.getHeight(), 1);
-			}
-
-			float * pixelsF = rawDepthPixels.getData();
-			unsigned char * pixels = depthPix.getData();
-
-			for (int i = 0; i < depthPix.size(); i++) {
-				pixels[i] = ofMap(rawDepthPixels[i], minDistance, maxDistance, 255, 0, true);
-				if (pixels[i] == 255) {
-					pixels[i] = 0;
-				}
-			}
-
-		}
-#endif
-
-		bNewFrame = true;
-	}
-}
 
 void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned)
 {
@@ -205,33 +189,13 @@ void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_pt
 //			depth->allocate(512, 424, GL_R32F);
 		depth->loadData(frameDepth[indexFront]);
 	}
-	if (frameDepth[indexFront].isAllocated())
+	if (frameRawDepth[indexFront].isAllocated())
 	{
 		aligned->loadData(frameAligned[indexFront]);
 	}
 
 	bNewFrame = false;
-	printf("new texture\n");
-}
-
-//--------------------------------------------------------------------------------
-bool ofxKinectV2::isFrameNew() {
-	return bNewFrame;
-}
-
-//--------------------------------------------------------------------------------
-ofPixels& ofxKinectV2::getDepthPixels() {
-	return depthPix;
-}
-
-//--------------------------------------------------------------------------------
-ofFloatPixels& ofxKinectV2::getRawDepthPixels() {
-	return rawDepthPixels;
-}
-
-//--------------------------------------------------------------------------------
-ofPixels& ofxKinectV2::getRgbPixels() {
-	return rgbPix;
+	std::printf("new texture\n");
 }
 
 //--------------------------------------------------------------------------------
@@ -246,9 +210,11 @@ void ofxKinectV2::close() {
 
 int ofxKinectV2::openKinect(std::string serial)
 {
-	pipeline = new libfreenect2::CpuPacketPipeline();
-	//pipeline = new libfreenect2::OpenGLPacketPipeline();
-	//pipeline = new libfreenect2::OpenCLPacketPipeline();
+	//pipeline = new libfreenect2::CpuPacketPipeline();
+	//ofAppGLFWWindow * glfwWindow = (ofAppGLFWWindow*)ofGetWindowPtr();
+	//GLFWwindow* window = glfwWindow->getGLFWWindow();
+	//pipeline = new libfreenect2::OpenGLPacketPipeline(window);
+	pipeline = new libfreenect2::OpenCLPacketPipeline();
 
 	if (pipeline)
 	{
