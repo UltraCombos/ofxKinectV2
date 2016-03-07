@@ -27,6 +27,8 @@ ofxKinectV2::ofxKinectV2() {
 	frameIr.resize(2);
 	frameRawDepth.resize(2);
 	frameAligned.resize(2);
+	pcVertices.resize(2, vector<ofVec3f>(525 * 412));
+	pcColors.resize(2, vector<ofFloatColor>(525 * 412));
 
 	//set default distance range to 50cm - 600cm
 
@@ -111,11 +113,9 @@ void ofxKinectV2::threadedFunction()
 
 	while (isThreadRunning()) 
 	{
-		if (!bOpened)
-			continue;
-		//float timestamp = ofGetElapsedTimef();
+		if (!bOpened) continue;
+
 		listener->waitForNewFrame(frames);
-		//std::printf("new frame cost %f seconds\n", ofGetElapsedTimef() - timestamp);
 		libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
 		libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
 		libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
@@ -134,30 +134,39 @@ void ofxKinectV2::threadedFunction()
 		for (auto pixel : frameAligned[indexBack].getPixelsIter()) // swap rgb
 			std::swap(pixel[0], pixel[2]);
 
-		if(!bUseRawDepth) {
-#if 1
+		if(!bUseRawDepth) 
+		{
 			auto& depth = frameDepth[indexBack];
 			if ((depth.getWidth() != frameRawDepth[indexBack].getWidth()) || (depth.getHeight() != frameRawDepth[indexBack].getHeight()))
 			{
 				depth.allocate(frameRawDepth[indexBack].getWidth(), frameRawDepth[indexBack].getHeight(), 3);
 			}
-			for (int i = 0; i < frameRawDepth[indexBack].size(); i++) {
-				float hue = ofMap(frameRawDepth[indexBack][i], minDistance, maxDistance, 0.0, 0.8, true);
-				if (hue == 0.8f) depth.setColor(i * 3, ofColor(0));
-				else if (hue == 0.0f) depth.setColor(i * 3, ofColor(0));
+			std::pair<float, float> minmax(0.0, 0.8);
+			for (int i = 0; i < frameRawDepth[indexBack].size(); i++) 
+			{
+				float hue = ofMap(frameRawDepth[indexBack][i], minDistance, maxDistance, minmax.first, minmax.second, true);
+				if (hue == minmax.first || hue == minmax.second) depth.setColor(i * 3, ofColor(0));
 				else depth.setColor(i * 3, ofFloatColor::fromHsb(hue, 0.9, 0.9));
 			}
-#else
-			for (auto pixel : frameRawDepth[indexBack].getPixelsIter())
+		}
+		
+		// get point cloud
+		{
+			float rgbPix = 0;
+			size_t i = 0;
+			for (int y = 0; y < 424; y++) 
 			{
-				pixel[0] = ofMap(pixel[0], minDistance, maxDistance, 1, 0, true);
-				if (pixel[0] == 1) {
-					pixel[0] = 0;
+				for (int x = 0; x < 512; x++) 
+				{
+					auto& pt = pcVertices[indexBack][i];
+					registration->getPointXYZRGB(&undistorted, &registered, y, x, pt.x, pt.y, pt.z, rgbPix);
+					const uint8_t *p = reinterpret_cast<uint8_t*>(&rgbPix);
+					pcColors[indexBack][i] = ofColor(p[2], p[1], p[0]);
+					i++;
 				}
 			}
-#endif
 		}
-
+		
 
 		std::lock_guard<std::mutex> guard(mutex);
 		std::swap(indexFront, indexBack);
@@ -171,31 +180,33 @@ void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_pt
 	std::lock_guard<std::mutex> guard(mutex);
 	if (!bNewFrame || !color || !ir || !depth || !aligned)
 		return;
+
 	if (frameColor[indexFront].isAllocated())
-	{
-//		if (!color->isAllocated())
-//			color->allocate(1920, 1080, GL_RGBA);
 		color->loadData(frameColor[indexFront]);
-	}
+
 	if (frameIr[indexFront].isAllocated())
-	{
-//		if (!ir->isAllocated())
-//			ir->allocate(512, 424, GL_R32F);
 		ir->loadData(frameIr[indexFront]);
-	}
+
 	if (frameDepth[indexFront].isAllocated())
-	{
-//		if (!depth->isAllocated())
-//			depth->allocate(512, 424, GL_R32F);
 		depth->loadData(frameDepth[indexFront]);
-	}
+
 	if (frameRawDepth[indexFront].isAllocated())
-	{
 		aligned->loadData(frameAligned[indexFront]);
-	}
 
 	bNewFrame = false;
 	std::printf("new texture\n");
+}
+
+std::vector<ofVec3f> ofxKinectV2::getPointCloudVertices()
+{
+	std::lock_guard<std::mutex> guard(mutex);
+	return pcVertices[indexFront];
+}
+
+std::vector<ofFloatColor> ofxKinectV2::getPointCloudColors()
+{
+	std::lock_guard<std::mutex> guard(mutex);
+	return pcColors[indexFront];
 }
 
 //--------------------------------------------------------------------------------
@@ -247,8 +258,6 @@ void ofxKinectV2::closeKinect()
 {
 	listener->release(frames);
 
-	// TODO: restarting ir stream doesn't work!
-	// TODO: bad things will happen, if frame listeners are freed before dev->stop() :(
 	dev->stop();
 	dev->close();
 

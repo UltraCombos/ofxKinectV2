@@ -34,13 +34,15 @@ public:
 	bool open(string serial);
 	bool open(unsigned int deviceId = 0);
 	void updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned);
+	std::vector<ofVec3f> getPointCloudVertices();
+	std::vector<ofFloatColor> getPointCloudColors();
 	void close();
 
 	ofParameterGroup params;
 	ofParameter<float> minDistance;
 	ofParameter<float> maxDistance;
 	ofParameter<bool> bUseRawDepth;
-
+	
 protected:
 	void threadedFunction();
 	int openKinect(std::string serial);
@@ -58,6 +60,8 @@ protected:
 	std::vector<ofFloatPixels> frameRawDepth;
 	std::vector<ofPixels> frameAligned;
 
+	std::vector<std::vector<ofVec3f>> pcVertices;
+	std::vector<std::vector<ofFloatColor>> pcColors;
 
 private:
 	libfreenect2::Freenect2 freenect2;
