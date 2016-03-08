@@ -1,0 +1,52 @@
+<ROOT>
+    <FONT_NAME>fonts/NotoSans-Bold.ttf</FONT_NAME>
+    <FONT_SIZE>8</FONT_SIZE>
+    <TEXT_PADDING>10</TEXT_PADDING>
+    <HEIGHT>22</HEIGHT>
+    <THEME_NAME>BOGART</THEME_NAME>
+    
+	<DEFAULT>
+	<HeaderBackgroundColor>0x1A1A1A</HeaderBackgroundColor>
+	<BackgroundColor>0x222222</BackgroundColor>
+	<BorderColor>0x1A1A1A</BorderColor>
+	<FillColor>0x303030</FillColor>
+	<TextColor>0xEEEEEE</TextColor>
+	</DEFAULT>
+	
+	<FLAT>
+	<HeaderBackgroundColor>0x2C3E50</HeaderBackgroundColor>
+	<BackgroundColor>0x2980B9</BackgroundColor>
+	<BorderColor>0x2C3E50</BorderColor>
+	<FillColor>0xE74C3C</FillColor>
+	<TextColor>0xECF0F1</TextColor>
+	</FLAT>
+	
+	<NEUTRAL_BLUE>
+	<HeaderBackgroundColor>0x193441</HeaderBackgroundColor>
+	<BackgroundColor>0x3E606F</BackgroundColor>
+	<BorderColor>0x193441</BorderColor>
+	<FillColor>0x91AA9D</FillColor>
+	<TextColor>0xFCFFF5</TextColor>
+	</NEUTRAL_BLUE>
+    
+    <SEA_WOLF>
+	<HeaderBackgroundColor>0x1E1E20</HeaderBackgroundColor>
+	<BackgroundColor>0x374140</BackgroundColor>
+	<BorderColor>0x2A2C2B</BorderColor>
+	<FillColor>0xDC3522</FillColor>
+	<TextColor>0xD9CB9E</TextColor>
+	</SEA_WOLF>
+    
+    <BOGART>
+	<HeaderBackgroundColor>0x1D2326</HeaderBackgroundColor>
+	<BackgroundColor>0x6A6A61</BackgroundColor>
+	<BorderColor>0x1D2326</BorderColor>
+	<FillColor>0x611427</FillColor>
+	<TextColor>0xDDDCC5</TextColor>
+	</BOGART>
+</ROOT>
+
+
+
+
+
