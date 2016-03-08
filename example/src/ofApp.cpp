@@ -1,57 +1,66 @@
 #include "ofApp.h"
 
-//NOTE: if you are unable to connect to your device on OS X, try unplugging and replugging in the power, while leaving the USB connected.
-//ofxKinectV2 will only work if the NUI Sensor shows up in the Superspeed category of the System Profiler in the USB section.
-
-//On OS X if you are not using the example project. Make sure to add OpenCL.framework to the Link Binary With Library Build Phase 
-//and change the line in Project.xcconfig to OTHER_LDFLAGS = $(OF_CORE_LIBS) $(OF_CORE_FRAMEWORKS) -framework OpenCL
-
 //--------------------------------------------------------------
 void ofApp::setup() {
 
 	//Uncomment for verbose info from libfreenect2
-	ofSetLogLevel(OF_LOG_VERBOSE);
+	//ofSetLogLevel(OF_LOG_VERBOSE);
 
 	ofBackground(30, 30, 30);
-#if 1
+	
 	//see how many devices we have.
 	ofxKinectV2 tmp;
 	vector<ofxKinectV2::KinectDeviceInfo> deviceList = tmp.getDeviceList();
 
 	//allocate for this many devices
-	kinects.resize(deviceList.size());
-	texColor.resize(kinects.size());
-	texIr.resize(kinects.size());
-	texDepth.resize(kinects.size());
-	texAligned.resize(kinects.size());
+	bundles.resize(deviceList.size());
 
-	panel.setup("", "settings.xml", 10, 100);
+	// setup gui
+	{
+		mSettings.setName("Settings");
+		mSettings.add(gShowTextures.set("show_textures", true));
+		mSettings.add(gThreshold.set("threshold", 128.0f, 0.0f, 255.0f));
 
-	//Note you don't have to use ofxKinectV2 as a shared pointer, but if you want to have it in a vector ( ie: for multuple ) it needs to be.
-	for (size_t d = 0; d < kinects.size(); d++) {
-		kinects[d] = shared_ptr<ofxKinectV2>(new ofxKinectV2);
-		kinects[d]->open(deviceList[d].serial);
-		texColor[d] = shared_ptr<ofTexture>(new ofTexture);
-		texIr[d] = shared_ptr<ofTexture>(new ofTexture);
-		texDepth[d] = shared_ptr<ofTexture>(new ofTexture);
-		texAligned[d] = shared_ptr<ofTexture>(new ofTexture);
+		mGui = shared_ptr<ofxGuiGroup>(new ofxGuiGroup);
+		loadGuiTheme(mGui, "fonts/theme.xml");
 
-		panel.add(kinects[d]->params);
+		mGui->setup("GUI");
+		mGui->add(guiMessage.set("message", ""));
+		mGui->add(mSettings);
 	}
 
-	panel.loadFromFile("settings.xml");
-#else
-	pipeline = new libfreenect2::CpuPacketPipeline();
-	string serial = freenect2.getDefaultDeviceSerialNumber();
-	dev = freenect2.openDevice(serial, pipeline);
-	listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
-	dev->setColorFrameListener(listener);
-	dev->setIrAndDepthFrameListener(listener);
-	dev->start();
-	ofLogVerbose("ofxKinectV2::openKinect") << "device serial: " << dev->getSerialNumber();
-	ofLogVerbose("ofxKinectV2::openKinect") << "device firmware: " << dev->getFirmwareVersion();
-	registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
-#endif
+
+	int d = 0;
+	size_t num = 512 * 424;
+	vector<ofVec3f> vertices(num);
+	vector<ofFloatColor> colors(num);
+	for (auto& b : bundles)
+	{
+		b.kinect = shared_ptr<ofxKinectV2>(new ofxKinectV2);
+		b.kinect->open(deviceList[d].serial);
+		b.color = shared_ptr<ofTexture>(new ofTexture);
+		b.ir= shared_ptr<ofTexture>(new ofTexture);
+		b.depth = shared_ptr<ofTexture>(new ofTexture);
+		b.aligned = shared_ptr<ofTexture>(new ofTexture);
+		b.vbo = shared_ptr<ofVbo>(new ofVbo);
+		b.vbo->setVertexData(&vertices[0], vertices.size(), GL_DYNAMIC_DRAW);
+		b.vbo->setColorData(&colors[0], colors.size(), GL_DYNAMIC_DRAW);
+		mGui->add(b.kinect->params);
+
+		b.paramGroup.setName(deviceList[d].serial + "_Transition");
+		b.paramGroup.add(b.position.set("position", ofVec3f(0), ofVec3f(-1), ofVec3f(1)));
+		b.paramGroup.add(b.angle.set("angle", ofVec3f(0), ofVec3f(-90), ofVec3f(90)));
+		mGui->add(b.paramGroup);
+		d++;
+	}
+	
+	mGui->loadFromFile(guiFilename);
+
+	mCamera = shared_ptr<ofEasyCam>(new ofEasyCam);
+	mCamera->setupPerspective(true, 45, 0.1, 10);
+	mCamera->setAspectRatio(16.0f / 9.0f);
+	//mCamera->setPosition(0, 0, FBO_WIDTH * 1.2f);
+	mCamera->setDistance(2.0f);
 }
 
 //--------------------------------------------------------------
@@ -59,68 +68,106 @@ void ofApp::update() {
 	ofSetWindowTitle(ofVAArgsToString("ofxKinectV2: %3.2f", ofGetFrameRate()));
 
 
-#if 1
-	for (size_t d = 0; d < kinects.size(); d++)
+	for (auto& b : bundles)
 	{
-		kinects[d]->updateTexture(texColor[d], texIr[d], texDepth[d], texAligned[d]);
+		if (gShowTextures)
+			b.kinect->updateTexture(b.color, b.ir, b.depth, b.aligned);
+
+		auto& vertices = b.kinect->getPointCloudVertices();
+		auto& colors = b.kinect->getPointCloudColors();
+		b.vbo->updateVertexData(&vertices[0].x, vertices.size());
+		b.vbo->updateColorData(&colors[0].r, colors.size());
 	}
-#else
-	listener->waitForNewFrame(frames);
-	listener->release(frames);
-#endif
+
 }
 
 //--------------------------------------------------------------
 void ofApp::draw() {
-//	ofDrawBitmapString("ofxKinectV2: Work in progress addon.\nBased on the excellent work by the OpenKinect libfreenect2 team\n\n-Requires USB 3.0 port ( superspeed )\n-Requires patched libusb. If you have the libusb from ofxKinect ( v1 ) linked to your project it will prevent superspeed on Kinect V2", 10, 14);
-#if 1
-	ofPushMatrix();
-	float color_w = 1920.0 * 424 / 1080;
-	auto rect = getCenteredRect(color_w + 512 + 512 + 512, 424 * kinects.size(), ofGetWidth(), ofGetHeight(), false);
-	float h = rect.height / kinects.size();
-	float sc = h / 424.0f;
-	ofTranslate(rect.position);
-	for (size_t d = 0; d < kinects.size(); d++) {
-		if (!texDepth[d]->isAllocated() || !texColor[d]->isAllocated() || !texIr[d]->isAllocated() || !texAligned[d]->isAllocated())
-			continue;
+
+	if (gShowTextures)
+	{
 		ofPushMatrix();
-		ofScale(sc, sc);
-		texColor[d]->draw(0, 0, color_w, 424);
-		ofTranslate(color_w, 0);
-		texIr[d]->draw(0, 0);
-		ofTranslate(texIr[d]->getWidth(), 0);
-		texDepth[d]->draw(0, 0);
-		ofTranslate(texDepth[d]->getWidth(), 0);
-		texAligned[d]->draw(0, 0);
+		float color_w = 1920.0 * 424 / 1080;
+		auto rect = getCenteredRect(color_w + 512 + 512 + 512, 424 * bundles.size(), ofGetWidth(), ofGetHeight(), false);
+		rect.y = 0;
+		float h = rect.height / bundles.size();
+		float sc = h / 424.0f;
+		ofTranslate(rect.position);
+		for (auto& b : bundles)
+		{
+			if (!b.color->isAllocated() || !b.ir->isAllocated() || !b.depth->isAllocated() || !b.aligned->isAllocated())
+				continue;
+			ofPushMatrix();
+			ofScale(sc, sc);
+			b.color->draw(0, 0, color_w, 424);
+			ofTranslate(color_w, 0);
+			b.ir->draw(0, 0);
+			ofTranslate(b.ir->getWidth(), 0);
+			b.depth->draw(0, 0);
+			ofTranslate(b.depth->getWidth(), 0);
+			b.aligned->draw(0, 0);
+			ofPopMatrix();
+			ofTranslate(0, h);
+		}
 		ofPopMatrix();
-		ofTranslate(0, h);
 	}
-	ofPopMatrix();
-	panel.draw();
-#endif
+
+	mCamera->begin();
+	ofEnableDepthTest();
+	for (auto& b : bundles)
+	{
+		ofPushMatrix();
+		ofTranslate(b.position);
+		ofRotateX(b.angle.get().x);
+		ofRotateY(b.angle.get().y);
+		ofRotateZ(b.angle.get().z);
+		b.vbo->draw(GL_POINTS, 0, 512 * 424);
+		ofPopMatrix();
+	}
+	ofDisableDepthTest();
+	mCamera->end();
+
+	if (bDebugVisible)
+		mGui->draw();
+
 }
 
 //--------------------------------------------------------------
 void ofApp::exit() {
-#if 0
-	listener->release(frames);
 
-	// TODO: restarting ir stream doesn't work!
-	// TODO: bad things will happen, if frame listeners are freed before dev->stop() :(
-	dev->stop();
-	dev->close();
-
-	delete listener;
-	listener = NULL;
-
-	delete registration;
-	registration = NULL;
-#endif
 }
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key) {
+	auto toggleFullscreen = [&]()
+	{
+		ofToggleFullscreen();
+		if (!(ofGetWindowMode() == OF_FULLSCREEN))
+		{
+			ofSetWindowShape(WIDTH, HEIGHT);
+			auto pos = ofVec2f(ofGetScreenWidth() - WIDTH, ofGetScreenHeight() - HEIGHT) * 0.5f;
+			ofSetWindowPosition(pos.x, pos.y);
+		}
+	};
 
+	switch (key)
+	{
+	case OF_KEY_F1:
+		bDebugVisible = !bDebugVisible;
+		break;
+	case OF_KEY_F11:
+		toggleFullscreen();
+		guiMessage = "fullscreen";
+		break;
+	case 's':
+		mGui->saveToFile(guiFilename);
+		guiMessage = "save-" + ofGetTimestampString("%M%S");
+		break;
+	case 'l':
+		mGui->loadFromFile(guiFilename);
+		guiMessage = "load-" + ofGetTimestampString("%M%S");
+		break;
+	}
 }
 
 //--------------------------------------------------------------
@@ -161,4 +208,31 @@ void ofApp::gotMessage(ofMessage msg) {
 //--------------------------------------------------------------
 void ofApp::dragEvent(ofDragInfo dragInfo) {
 
+}
+
+void ofApp::loadGuiTheme(std::shared_ptr<ofxGuiGroup> gui, string path)
+{
+	ofXml xml(path);
+	gui->loadFont(xml.getValue("FONT_NAME"), xml.getIntValue("FONT_SIZE"));
+	gui->setDefaultTextPadding(xml.getIntValue("TEXT_PADDING"));
+	gui->setDefaultHeight(xml.getIntValue("HEIGHT"));
+
+	string theme_name = xml.getValue("THEME_NAME");
+	if (xml.exists(theme_name))
+	{
+		xml.setTo(theme_name);
+		auto hexHeaderBackgroundColor = ofColor::fromHex(ofHexToInt(xml.getValue("HeaderBackgroundColor")));
+		auto hexBackgroundColor = ofColor::fromHex(ofHexToInt(xml.getValue("BackgroundColor")));
+		auto hexBorderColor = ofColor::fromHex(ofHexToInt(xml.getValue("BorderColor")));
+		auto hexFillColor = ofColor::fromHex(ofHexToInt(xml.getValue("FillColor")));
+		auto hexTextColor = ofColor::fromHex(ofHexToInt(xml.getValue("TextColor")));
+		gui->setHeaderBackgroundColor(hexHeaderBackgroundColor);
+		gui->setBorderColor(hexBorderColor);
+		gui->setTextColor(hexTextColor);
+		gui->setDefaultHeaderBackgroundColor(hexHeaderBackgroundColor);
+		gui->setDefaultBackgroundColor(hexBackgroundColor);
+		gui->setDefaultBorderColor(hexBorderColor);
+		gui->setDefaultFillColor(hexFillColor);
+		gui->setDefaultTextColor(hexTextColor);
+	}
 }

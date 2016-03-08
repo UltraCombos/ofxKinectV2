@@ -22,26 +22,38 @@ public:
 	void dragEvent(ofDragInfo dragInfo);
 	void gotMessage(ofMessage msg);
 
-#if 1
-	ofxPanel panel;
+	void loadGuiTheme(std::shared_ptr<ofxGuiGroup> gui, string path);
 
-	std::vector<std::shared_ptr<ofxKinectV2>> kinects;
+	enum {
+		WIDTH = 1280,
+		HEIGHT = 720
+	};
 
-	std::vector<std::shared_ptr<ofTexture>> texColor;
-	std::vector<std::shared_ptr<ofTexture>> texIr;
-	std::vector<std::shared_ptr<ofTexture>> texDepth;
-	std::vector<std::shared_ptr<ofTexture>> texAligned;
-#else
-	libfreenect2::Freenect2 freenect2;
+	bool bDebugVisible = true;
+	std::shared_ptr<ofxGuiGroup> mGui;
+	ofParameter<string> guiMessage;
+	const string guiFilename = "settings.xml";
+	ofParameterGroup mSettings;
+	ofParameter<bool> gShowTextures;
+	ofParameter<float> gThreshold;
 
-	libfreenect2::Freenect2Device *dev = 0;
-	libfreenect2::PacketPipeline *pipeline = 0;
+	struct KinectBundle
+	{
+		std::shared_ptr<ofxKinectV2> kinect;
+		std::shared_ptr<ofTexture> color;
+		std::shared_ptr<ofTexture> ir;
+		std::shared_ptr<ofTexture> depth;
+		std::shared_ptr<ofTexture> aligned;
+		std::shared_ptr<ofVbo> vbo;
 
-	libfreenect2::FrameMap frames;
+		ofParameterGroup paramGroup;
+		ofParameter<ofVec3f> position;
+		ofParameter<ofVec3f> angle;
+	};
+	std::vector<KinectBundle> bundles;
 
-	libfreenect2::Registration* registration;
-	libfreenect2::SyncMultiFrameListener* listener;
-#endif
+
+	std::shared_ptr<ofEasyCam> mCamera;
 
 	ofRectangle getCenteredRect(int srcWidth, int srcHeight, int otherWidth = ofGetWidth(), int otherHeight = ofGetHeight(), bool isFill = true)
 	{

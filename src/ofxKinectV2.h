@@ -33,9 +33,10 @@ public:
 
 	bool open(string serial);
 	bool open(unsigned int deviceId = 0);
+	bool isFrameNew() { return bNewFrame; }
 	void updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned);
-	std::vector<ofVec3f> getPointCloudVertices();
-	std::vector<ofFloatColor> getPointCloudColors();
+	std::vector<ofVec3f>& getPointCloudVertices();
+	std::vector<ofFloatColor>& getPointCloudColors();
 	void close();
 
 	ofParameterGroup params;

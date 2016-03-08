@@ -4,12 +4,11 @@
 //========================================================================
 int main() {
 #if 1
-	//ofGLWindowSettings settings;
-	ofGLFWWindowSettings settings;
+	ofGLWindowSettings settings;
 	settings.width = 1280;
 	settings.height = 720;
-//	settings.setGLVersion(4, 3);
-//	settings.windowMode = OF_WINDOW;
+	settings.setGLVersion(4, 3);
+	settings.windowMode = OF_WINDOW;
 	ofCreateWindow(settings);
 #else
 	ofSetupOpenGL(1024, 768, OF_WINDOW);			// <-------- setup the GL context

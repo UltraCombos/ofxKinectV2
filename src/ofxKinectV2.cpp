@@ -12,8 +12,6 @@
 
 //--------------------------------------------------------------------------------
 ofxKinectV2::ofxKinectV2() {
-	bNewFrame = false;
-	bOpened = false;
 
 	if (ofGetLogLevel() == OF_LOG_VERBOSE) {
 		libfreenect2::setGlobalLogger(libfreenect2::createConsoleLogger(libfreenect2::Logger::Debug));
@@ -27,8 +25,8 @@ ofxKinectV2::ofxKinectV2() {
 	frameIr.resize(2);
 	frameRawDepth.resize(2);
 	frameAligned.resize(2);
-	pcVertices.resize(2, vector<ofVec3f>(525 * 412));
-	pcColors.resize(2, vector<ofFloatColor>(525 * 412));
+	pcVertices.resize(2, vector<ofVec3f>(512 * 424));
+	pcColors.resize(2, vector<ofFloatColor>(512 * 424));
 
 	//set default distance range to 50cm - 600cm
 
@@ -95,7 +93,7 @@ bool ofxKinectV2::open(unsigned int deviceId) {
 bool ofxKinectV2::open(string serial) {
 	close();
 
-	params.setName("kinectV2 " + serial);
+	params.setName("kinectV2_" + serial);
 
 	int retVal = openKinect(serial);
 
@@ -127,6 +125,7 @@ void ofxKinectV2::threadedFunction()
 		frameAligned[indexBack].setFromPixels(registered.data, registered.width, registered.height, 4);
 		
 		listener->release(frames);
+
 		for (auto pixel : frameColor[indexBack].getPixelsIter()) // swap rgb
 			std::swap(pixel[0], pixel[2]);
 		for (auto pixel : frameIr[indexBack].getPixelsIter()) // downscale to 0-1
@@ -160,6 +159,7 @@ void ofxKinectV2::threadedFunction()
 				{
 					auto& pt = pcVertices[indexBack][i];
 					registration->getPointXYZRGB(&undistorted, &registered, y, x, pt.x, pt.y, pt.z, rgbPix);
+					pt.z *= -1;
 					const uint8_t *p = reinterpret_cast<uint8_t*>(&rgbPix);
 					pcColors[indexBack][i] = ofColor(p[2], p[1], p[0]);
 					i++;
@@ -167,6 +167,10 @@ void ofxKinectV2::threadedFunction()
 			}
 		}
 		
+		//while (bNewFrame)
+		{
+			// wait for main thread
+		}
 
 		std::lock_guard<std::mutex> guard(mutex);
 		std::swap(indexFront, indexBack);
@@ -194,18 +198,15 @@ void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_pt
 		aligned->loadData(frameAligned[indexFront]);
 
 	bNewFrame = false;
-	std::printf("new texture\n");
 }
 
-std::vector<ofVec3f> ofxKinectV2::getPointCloudVertices()
+std::vector<ofVec3f>& ofxKinectV2::getPointCloudVertices()
 {
-	std::lock_guard<std::mutex> guard(mutex);
 	return pcVertices[indexFront];
 }
 
-std::vector<ofFloatColor> ofxKinectV2::getPointCloudColors()
+std::vector<ofFloatColor>& ofxKinectV2::getPointCloudColors()
 {
-	std::lock_guard<std::mutex> guard(mutex);
 	return pcColors[indexFront];
 }
 
