@@ -40,11 +40,12 @@ public:
 	struct KinectBundle
 	{
 		std::shared_ptr<ofxKinectV2> kinect;
-		std::shared_ptr<ofTexture> color;
-		std::shared_ptr<ofTexture> ir;
-		std::shared_ptr<ofTexture> depth;
-		std::shared_ptr<ofTexture> aligned;
-		std::shared_ptr<ofVbo> vbo;
+		ofTexture color;
+		ofTexture ir;
+		ofTexture depth;
+		ofTexture aligned;
+		ofVbo vbo;
+		int numIndices = 0;
 
 		ofParameterGroup paramGroup;
 		ofParameter<ofVec3f> position;

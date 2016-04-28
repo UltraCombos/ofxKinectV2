@@ -25,14 +25,27 @@ ofxKinectV2::ofxKinectV2() {
 	frameIr.resize(2);
 	frameRawDepth.resize(2);
 	frameAligned.resize(2);
-	pcVertices.resize(2, vector<ofVec3f>(512 * 424));
-	pcColors.resize(2, vector<ofFloatColor>(512 * 424));
+	pcVertices.resize(2, vector<ofVec4f>(DEPTH_WIDTH * DEPTH_HEIGHT));
+	pcColors.resize(2, vector<ofFloatColor>(DEPTH_WIDTH * DEPTH_HEIGHT));
 
 	//set default distance range to 50cm - 600cm
 
 	params.add(minDistance.set("minDistance", 500, 0, 12000));
 	params.add(maxDistance.set("maxDistance", 6000, 0, 12000));
 	params.add(bUseRawDepth.set("rawDepth", false));
+
+	computeIndices.unload();
+	computeIndices.setupShaderFromSource(GL_COMPUTE_SHADER, comp_glsl);
+	computeIndices.linkProgram();
+
+	depthTexture.allocate(DEPTH_WIDTH, DEPTH_HEIGHT, GL_R32F);
+
+	vector<int> indices((DEPTH_WIDTH - 1) * (DEPTH_HEIGHT - 1) * 6, 0);
+	indicesBuffer.allocate(indices, GL_DYNAMIC_DRAW);
+
+	atomicCounter.allocate();
+	int data = 0;
+	atomicCounter.setData(sizeof(int), &data, GL_DYNAMIC_COPY);
 }
 
 //--------------------------------------------------------------------------------
@@ -47,6 +60,7 @@ static bool sortBySerialName(const ofxKinectV2::KinectDeviceInfo & A, const ofxK
 
 //--------------------------------------------------------------------------------
 vector<ofxKinectV2::KinectDeviceInfo> ofxKinectV2::getDeviceList() {
+
 	vector<KinectDeviceInfo> devices;
 
 	int num = freenect2.enumerateDevices();
@@ -91,6 +105,7 @@ bool ofxKinectV2::open(unsigned int deviceId) {
 
 //--------------------------------------------------------------------------------
 bool ofxKinectV2::open(string serial) {
+
 	close();
 
 	params.setName("kinectV2_" + serial);
@@ -107,7 +122,7 @@ bool ofxKinectV2::open(string serial) {
 //--------------------------------------------------------------------------------
 void ofxKinectV2::threadedFunction() 
 {
-	libfreenect2::Frame undistorted(512, 424, 4), registered(512, 424, 4);
+	libfreenect2::Frame undistorted(DEPTH_WIDTH, DEPTH_HEIGHT, 4), registered(DEPTH_WIDTH, DEPTH_HEIGHT, 4);
 
 	while (isThreadRunning()) 
 	{
@@ -136,14 +151,15 @@ void ofxKinectV2::threadedFunction()
 		if(!bUseRawDepth) 
 		{
 			auto& depth = frameDepth[indexBack];
-			if ((depth.getWidth() != frameRawDepth[indexBack].getWidth()) || (depth.getHeight() != frameRawDepth[indexBack].getHeight()))
+			auto& raw_depth = frameRawDepth[indexBack];
+			if ((depth.getWidth() != raw_depth.getWidth()) || (depth.getHeight() != raw_depth.getHeight()))
 			{
-				depth.allocate(frameRawDepth[indexBack].getWidth(), frameRawDepth[indexBack].getHeight(), 3);
+				depth.allocate(raw_depth.getWidth(), raw_depth.getHeight(), 3);
 			}
 			std::pair<float, float> minmax(0.0, 0.8);
-			for (int i = 0; i < frameRawDepth[indexBack].size(); i++) 
+			for (int i = 0; i < raw_depth.size(); i++)
 			{
-				float hue = ofMap(frameRawDepth[indexBack][i], minDistance, maxDistance, minmax.first, minmax.second, true);
+				float hue = ofMap(raw_depth[i], minDistance, maxDistance, minmax.first, minmax.second, true);
 				if (hue == minmax.first || hue == minmax.second) depth.setColor(i * 3, ofColor(0));
 				else depth.setColor(i * 3, ofFloatColor::fromHsb(hue, 0.9, 0.9));
 			}
@@ -153,13 +169,14 @@ void ofxKinectV2::threadedFunction()
 		{
 			float rgbPix = 0;
 			size_t i = 0;
-			for (int y = 0; y < 424; y++) 
+			for (int y = 0; y < DEPTH_HEIGHT; y++)
 			{
-				for (int x = 0; x < 512; x++) 
+				for (int x = 0; x < DEPTH_WIDTH; x++)
 				{
 					auto& pt = pcVertices[indexBack][i];
 					registration->getPointXYZRGB(&undistorted, &registered, y, x, pt.x, pt.y, pt.z, rgbPix);
-					pt.z *= -1;
+					pt.z *= -1.0f;
+					pt.w = 1.0f;
 					const uint8_t *p = reinterpret_cast<uint8_t*>(&rgbPix);
 					pcColors[indexBack][i] = ofColor(p[2], p[1], p[0]);
 					i++;
@@ -179,28 +196,28 @@ void ofxKinectV2::threadedFunction()
 }
 
 
-void ofxKinectV2::updateTexture(std::shared_ptr<ofTexture> color, std::shared_ptr<ofTexture> ir, std::shared_ptr<ofTexture> depth, std::shared_ptr<ofTexture> aligned)
+void ofxKinectV2::updateTexture(ofTexture* color, ofTexture* ir, ofTexture* depth, ofTexture* aligned)
 {
 	std::lock_guard<std::mutex> guard(mutex);
-	if (!bNewFrame || !color || !ir || !depth || !aligned)
+	if (!bNewFrame)
 		return;
 
-	if (frameColor[indexFront].isAllocated())
+	if (frameColor[indexFront].isAllocated() && color)
 		color->loadData(frameColor[indexFront]);
 
-	if (frameIr[indexFront].isAllocated())
+	if (frameIr[indexFront].isAllocated() && ir)
 		ir->loadData(frameIr[indexFront]);
 
-	if (frameDepth[indexFront].isAllocated())
+	if (frameDepth[indexFront].isAllocated() && depth)
 		depth->loadData(frameDepth[indexFront]);
 
-	if (frameRawDepth[indexFront].isAllocated())
+	if (frameRawDepth[indexFront].isAllocated() && aligned)
 		aligned->loadData(frameAligned[indexFront]);
 
 	bNewFrame = false;
 }
 
-std::vector<ofVec3f>& ofxKinectV2::getPointCloudVertices()
+std::vector<ofVec4f>& ofxKinectV2::getPointCloudVertices()
 {
 	return pcVertices[indexFront];
 }
@@ -208,6 +225,69 @@ std::vector<ofVec3f>& ofxKinectV2::getPointCloudVertices()
 std::vector<ofFloatColor>& ofxKinectV2::getPointCloudColors()
 {
 	return pcColors[indexFront];
+}
+
+int ofxKinectV2::getVbo(ofVbo& vbo)
+{
+	auto& vertices = pcVertices[indexFront];
+	auto& colors = pcColors[indexFront];
+	if (!vbo.getIsAllocated())
+	{
+		vector<ofVec2f> texCoords;
+		for (int y = 0; y < DEPTH_HEIGHT; y++)
+		{
+			float coord_y = (float)y / DEPTH_HEIGHT;
+			for (int x = 0; x < DEPTH_WIDTH; x++)
+			{
+				float coord_x = (float)x / DEPTH_HEIGHT;
+				texCoords.emplace_back(coord_x, coord_y);
+			}
+		}
+		vbo.setTexCoordData(&texCoords[0], texCoords.size(), GL_STATIC_DRAW);
+		vbo.setVertexData(&vertices[0].x, 4, vertices.size(), GL_DYNAMIC_DRAW);
+		vbo.setColorData(&colors[0], colors.size(), GL_DYNAMIC_DRAW);
+		vbo.setIndexBuffer(indicesBuffer);
+	}
+	else
+	{
+		vbo.updateVertexData(&vertices[0].x, vertices.size());
+		vbo.updateColorData(&colors[0].r, colors.size());
+	}
+
+	auto& depth = frameRawDepth[indexFront];
+	if (depth.getWidth() && depth.getHeight())
+	{
+		{
+			std::lock_guard<std::mutex> guard(mutex);
+			depthTexture.loadData(&depth[0], DEPTH_WIDTH, DEPTH_HEIGHT, GL_RED);
+
+			//vector<float> dd(512 * 424);
+			//memcpy(&dd[0], depth.getData(), sizeof(float) * dd.size());
+		}
+		
+		depthTexture.bindAsImage(0, GL_READ_ONLY);
+		indicesBuffer.bindBase(GL_SHADER_STORAGE_BUFFER, 0);
+		atomicCounter.bindBase(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+		computeIndices.begin();
+		computeIndices.setUniform1i("bUseUserMap", 0);
+		computeIndices.dispatchCompute(DEPTH_WIDTH / 32, DEPTH_HEIGHT / 8, 1);
+		computeIndices.end();
+
+		indicesBuffer.unbindBase(GL_SHADER_STORAGE_BUFFER, 0);
+		atomicCounter.unbindBase(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+#if 0
+		auto atomic = atomicCounter.map<int>(GL_READ_ONLY);
+		int num = atomic[0];
+		atomicCounter.unmap();
+		cout << "atomic: " << num << endl;
+#endif
+		int data = 0;
+		atomicCounter.updateData(0, sizeof(int), &data);
+	}
+
+	return indicesBuffer.size() / sizeof(int);
 }
 
 //--------------------------------------------------------------------------------

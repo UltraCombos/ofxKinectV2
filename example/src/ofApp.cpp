@@ -38,13 +38,6 @@ void ofApp::setup() {
 	{
 		b.kinect = shared_ptr<ofxKinectV2>(new ofxKinectV2);
 		b.kinect->open(deviceList[d].serial);
-		b.color = shared_ptr<ofTexture>(new ofTexture);
-		b.ir= shared_ptr<ofTexture>(new ofTexture);
-		b.depth = shared_ptr<ofTexture>(new ofTexture);
-		b.aligned = shared_ptr<ofTexture>(new ofTexture);
-		b.vbo = shared_ptr<ofVbo>(new ofVbo);
-		b.vbo->setVertexData(&vertices[0], vertices.size(), GL_DYNAMIC_DRAW);
-		b.vbo->setColorData(&colors[0], colors.size(), GL_DYNAMIC_DRAW);
 		mGui->add(b.kinect->params);
 
 		b.paramGroup.setName(deviceList[d].serial + "_Transition");
@@ -71,12 +64,10 @@ void ofApp::update() {
 	for (auto& b : bundles)
 	{
 		if (gShowTextures)
-			b.kinect->updateTexture(b.color, b.ir, b.depth, b.aligned);
+			b.kinect->updateTexture(&b.color, &b.ir, &b.depth, &b.aligned);
 
-		auto& vertices = b.kinect->getPointCloudVertices();
-		auto& colors = b.kinect->getPointCloudColors();
-		b.vbo->updateVertexData(&vertices[0].x, vertices.size());
-		b.vbo->updateColorData(&colors[0].r, colors.size());
+		b.numIndices = b.kinect->getVbo(b.vbo);
+		//printf("vbo vertices: %i, indices: %i\n", b.vbo.getNumVertices(), b.numIndices);
 	}
 
 }
@@ -95,17 +86,17 @@ void ofApp::draw() {
 		ofTranslate(rect.position);
 		for (auto& b : bundles)
 		{
-			if (!b.color->isAllocated() || !b.ir->isAllocated() || !b.depth->isAllocated() || !b.aligned->isAllocated())
+			if (!b.color.isAllocated() || !b.ir.isAllocated() || !b.depth.isAllocated() || !b.aligned.isAllocated())
 				continue;
 			ofPushMatrix();
 			ofScale(sc, sc);
-			b.color->draw(0, 0, color_w, 424);
+			b.color.draw(0, 0, color_w, 424);
 			ofTranslate(color_w, 0);
-			b.ir->draw(0, 0);
-			ofTranslate(b.ir->getWidth(), 0);
-			b.depth->draw(0, 0);
-			ofTranslate(b.depth->getWidth(), 0);
-			b.aligned->draw(0, 0);
+			b.ir.draw(0, 0);
+			ofTranslate(b.ir.getWidth(), 0);
+			b.depth.draw(0, 0);
+			ofTranslate(b.depth.getWidth(), 0);
+			b.aligned.draw(0, 0);
 			ofPopMatrix();
 			ofTranslate(0, h);
 		}
@@ -114,6 +105,7 @@ void ofApp::draw() {
 
 	mCamera->begin();
 	ofEnableDepthTest();
+	//ofEnableBlendMode(OF_BLENDMODE_ADD);
 	for (auto& b : bundles)
 	{
 		ofPushMatrix();
@@ -121,9 +113,11 @@ void ofApp::draw() {
 		ofRotateX(b.angle.get().x);
 		ofRotateY(b.angle.get().y);
 		ofRotateZ(b.angle.get().z);
-		b.vbo->draw(GL_POINTS, 0, 512 * 424);
+		b.vbo.drawElements(GL_TRIANGLES, b.numIndices);
+		//b.vbo.draw(GL_POINTS, 0, b.vbo.getNumVertices());
 		ofPopMatrix();
 	}
+	//ofEnableBlendMode(OF_BLENDMODE_ALPHA);
 	ofDisableDepthTest();
 	mCamera->end();
 
